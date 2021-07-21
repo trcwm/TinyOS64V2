@@ -359,6 +359,21 @@ typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_ATTRIBUTES)(
     uint64_t                                 *result  /* OPTIONAL  */
 );
 
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_GET_BAR_ATTRIBUTES)(
+    EFI_PCI_IO_PROTOCOL  *self,
+    uint8_t               barIndex,
+    uint64_t             *supports  /* optional */, 
+    void                 **Resources /* optional */
+);
+
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_SET_BAR_ATTRIBUTES)(
+    EFI_PCI_IO_PROTOCOL *self,
+    uint64_t             Attributes,
+    uint8_t              BarIndex,
+    uint64_t             *Offset,    /* in out */
+    uint64_t             *Length     /* in out */
+); 
+
 struct EFI_PCI_IO_PROTOCOL { 
     EFI_PCI_IO_PROTOCOL_POLL_IO_MEM        pollMem;
     EFI_PCI_IO_PROTOCOL_POLL_IO_MEM        pollIo;
@@ -378,4 +393,3 @@ struct EFI_PCI_IO_PROTOCOL {
     uint64_t               romSize;
     void                  *romImage;
 };
-
