@@ -5,6 +5,11 @@ Proof of concept only. Don't expect this to ever be finished.
 ## URLs
 
 * https://makandracards.com/makandra/1192-using-qemu-to-quickly-test-an-iso-or-bootable-usb-drive
+* https://github.com/nothingstopsme/winusb-usbaudio/tree/master/usbaudio
+* https://uefi.org/sites/default/files/resources/UEFI_Spec_2_8_final.pdf
+* https://wiki.osdev.org/Intel_High_Definition_Audio
+
+
 
 
 ## Microsoft x64 calling convention

@@ -4,9 +4,6 @@
 #include "myprint.h"
 #include "efi.h"
 
-//static constexpr int width  = 800;
-//static constexpr int height = 600;
-
 static constexpr float absolute(float v)
 {
     if (v < 0)
@@ -114,7 +111,6 @@ void mandelbrot(const int width, const int height, uint32_t *frameBuffer)
 
 extern "C"
 {
-    //__attribute__((naked)) void efi_init(EFI_HANDLE handle, EFI_SYSTEM_TABLE *sysTbl)
     void efi_init(EFI_HANDLE handle, EFI_SYSTEM_TABLE *sysTbl)
     {
         sysTbl->m_conOut->m_clearScreen(sysTbl->m_conOut);
@@ -153,6 +149,8 @@ extern "C"
             snprintf(buffer, sizeof(buffer), L"Available modes: %d\n\r", gop->Mode->m_maxMode);
             sysTbl->m_conOut->m_outputString(sysTbl->m_conOut, buffer);
 
+            // try set mode to 640x480
+            int32_t desiredMode = -1;
             for(size_t modeIdx = 0; modeIdx < maxMode; modeIdx++)
             {
                 if (modeIdx % 2 == 0)
@@ -161,11 +159,29 @@ extern "C"
                 }
 
                 gop->QueryMode(gop, modeIdx, &sizeOfInfo, &info);
+
+                auto modeWidth  = info->m_horizontalResolution;
+                auto modeHeight = info->m_verticalResolution;
+
                 snprintf(buffer, sizeof(buffer), L"mode %d -> x=%d  y=%d        ", 
                     modeIdx,
-                    info->m_horizontalResolution,
-                    info->m_verticalResolution);
+                    modeWidth,
+                    modeHeight);
+                
                 sysTbl->m_conOut->m_outputString(sysTbl->m_conOut, buffer);
+
+                if ((modeWidth == 640) && (modeHeight== 480))
+                {
+                    desiredMode = modeIdx;
+                }
+            }
+            sysTbl->m_conOut->m_outputString(sysTbl->m_conOut, (CHAR16*) L"\n\r");
+
+            if (desiredMode != -1)
+            {
+                snprintf(buffer, sizeof(buffer), L"Setting GOP to mode %d\n", desiredMode);
+                sysTbl->m_conOut->m_outputString(sysTbl->m_conOut, buffer);
+                gop->SetMode(gop, desiredMode);
             }
 
             mandelbrot(gop->Mode->m_info->m_horizontalResolution, 
