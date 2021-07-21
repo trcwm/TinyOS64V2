@@ -14,12 +14,14 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
 set(LINKERFILE ${PROJECT_SOURCE_DIR}/linker/linker.ld)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fshort-wchar -nostartfiles -nostdlib -fno-stack-check -fno-stack-protector -mno-stack-arg-probe -ffreestanding -Wl,-dll -shared -Wl,--subsystem,10 -e efi_init")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions -fshort-wchar -nostartfiles -nostdlib -fno-stack-check -fno-stack-protector -mno-stack-arg-probe -ffreestanding -Wl,-dll -shared -Wl,--subsystem,10 -e efi_init")
 #set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -ffreestanding -nostartfiles -nostdlib -Wl,-dll -shared -Wl,--subsystem,10 -e efi_init -T${LINKERFILE}")
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Map=output.map")
 
-add_executable(boot src/main.cpp)
+add_executable(boot 
+    src/myprint.cpp
+    src/main.cpp)
 
 add_custom_command(TARGET boot POST_BUILD
     COMMAND mv boot.exe BOOTX64.EFI
