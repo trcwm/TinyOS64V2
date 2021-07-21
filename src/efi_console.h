@@ -30,6 +30,35 @@ struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL
 };
 
 // ================================================================================
+//   Text Input Procotol
+// ================================================================================
+
+struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL; // pre-declaration
+
+struct EFI_INPUT_KEY
+{ 
+    uint64_t    m_scanCode;
+    CHAR16      m_unicodeChar;
+};
+
+typedef EFI_STATUS (*EFI_INPUT_RESET)(
+    EFI_SIMPLE_TEXT_INPUT_PROTOCOL  *self,
+    BOOLEAN                         extendedVerification
+);
+
+typedef EFI_STATUS (*EFI_INPUT_READ_KEY)( 
+    EFI_SIMPLE_TEXT_INPUT_PROTOCOL *self,
+    EFI_INPUT_KEY                  *Key
+);
+
+struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL 
+{ 
+    EFI_INPUT_RESET     Reset; 
+    EFI_INPUT_READ_KEY  ReadKeyStroke; 
+    EFI_EVENT           WaitForKey; 
+};
+
+// ================================================================================
 //   Graphics Output Procotol
 // ================================================================================
 

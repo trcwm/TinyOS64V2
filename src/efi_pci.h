@@ -3,6 +3,11 @@
 #include <cstdint>
 #include "efi_base.h"
 
+// ========================================================================
+//
+//   EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL
+//
+// ========================================================================
 
 #define EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL_GUID \ {0x2F707EBB,0x4A1A,0x11d4,\  {0x9A,0x38,0x00,0x90,0x27,0x3F,0xC1,0x4D}}
 
@@ -153,10 +158,14 @@ struct EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL
 
 
 
-
-
+// ========================================================================
+//
+//   EFI_PCI_IO_PROTOCOL
+//
+// ========================================================================
 
 struct EFI_PCI_IO_PROTOCOL; // pre-declaration
+#define EFI_PCI_IO_PROTOCOL_GUID \ {0x4cf5b200,0x68b8,0x4ca5,\  {0x9e,0xec,0xb2,0x3e,0x3f,0x50,0x02,0x9a}}
 
 typedef enum 
 { 

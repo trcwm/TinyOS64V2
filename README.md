@@ -8,8 +8,9 @@ Proof of concept only. Don't expect this to ever be finished.
 * https://github.com/nothingstopsme/winusb-usbaudio/tree/master/usbaudio
 * https://uefi.org/sites/default/files/resources/UEFI_Spec_2_8_final.pdf
 * https://wiki.osdev.org/Intel_High_Definition_Audio
-
-
+* https://uefi.org/sites/default/files/resources/ACPI_6_3_final_Jan30.pdf
+* https://wiki.osdev.org/PCI#Base_Address_Registers
+* https://wiki.osdev.org/PCI_Express
 
 
 ## Microsoft x64 calling convention

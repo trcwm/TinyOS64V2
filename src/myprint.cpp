@@ -56,10 +56,23 @@ namespace mi
 
 }
 
-/** convert a 32-bit number to an 8-digit ASCII hex number */
+/** convert a 64-bit number to an 16-digit ASCII hex number */
 static void toHex(mi::PutLimitedString &output, uint64_t val)
 {
     constexpr const uint32_t digits = 16;
+    for(uint32_t i=0; i<digits; i++)
+    {
+        uint32_t digit = (val >> ((digits-i-1)*4)) & 0x0F;
+        if (digit <= 9)
+            output.putc(L'0'+digit);
+        else
+            output.putc(L'A'+digit-10);
+    }
+}
+
+static void toHex32(mi::PutLimitedString &output, uint32_t val)
+{
+    constexpr const uint32_t digits = 8;
     for(uint32_t i=0; i<digits; i++)
     {
         uint32_t digit = (val >> ((digits-i-1)*4)) & 0x0F;
@@ -145,11 +158,14 @@ static void format(mi::PutLimitedString &output, const wchar_t *fmt, va_list va)
                 case L'X':
                     toHex(output, va_arg(va, uint64_t));
                     break;
+                case L'x':
+                    toHex32(output, va_arg(va, uint32_t));
+                    break;                    
                 case L'u':
                     tmp = toUDec(output, va_arg(va, uint32_t));
                     break;
                 case L'd':
-                    vtmp =  va_arg(va, uint32_t);
+                    vtmp =  va_arg(va, int32_t);
                     if ((vtmp & 0x80000000) != 0)
                     {
                         // sign bit, we have a negative number
@@ -163,6 +179,10 @@ static void format(mi::PutLimitedString &output, const wchar_t *fmt, va_list va)
                     {
                         tmp = toUDec(output, vtmp);
                     }
+                    break;
+                case L'c':
+                    ch = va_arg(va, int);
+                    output.putc(ch);
                     break;
                 case L's':
                     charptr = va_arg(va, wchar_t*);
@@ -182,16 +202,16 @@ static void format(mi::PutLimitedString &output, const wchar_t *fmt, va_list va)
     }
 }
 
-size_t snprintf(wchar_t *s, size_t n, const wchar_t *fmt, ...)
+size_t snprintf(wchar_t *s, size_t n, const wchar_t *fmt, va_list va)
 {
-    va_list va;
-    va_start(va,fmt);
+    //va_list va;
+    //va_start(va,fmt);
 
     mi::PutLimitedString outString(s, n);
 
     format(outString,fmt,va);
     outString.terminate();
-    va_end(va);
+    //va_end(va);
 
     return outString.getLength();
 }
