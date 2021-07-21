@@ -156,7 +156,7 @@ struct EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL
 
 
 
-
+struct EFI_PCI_IO_PROTOCOL; // pre-declaration
 
 typedef enum 
 { 
@@ -276,6 +276,88 @@ typedef enum
     EfiPciIoOperationBusMasterCommonBuffer, 
     EfiPciIoOperationMaximum
 } EFI_PCI_IO_PROTOCOL_OPERATION;
+
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_CONFIG)( 
+    EFI_PCI_IO_PROTOCOL        *self,
+    EFI_PCI_IO_PROTOCOL_WIDTH  width,
+    uint32_t                   offset,
+    uint64_t                   count,
+    void                      *buffer
+);
+
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_COPY_MEM)( 
+    EFI_PCI_IO_PROTOCOL        *self,
+    EFI_PCI_IO_PROTOCOL_WIDTH  width,
+    uint8_t                    destBarIndex,
+    uint64_t                   destOffset,
+    uint8_t                    srcBarIndex,
+    uint64_t                   srcOffset,
+    uint64_t                   count
+);
+
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_MAP)( 
+    EFI_PCI_IO_PROTOCOL            *self,
+    EFI_PCI_IO_PROTOCOL_OPERATION  operation,
+    void                           *hostAddress, /* in */
+    uint64_t                       *numberOfBytes, /* in out */
+    EFI_PHYSICAL_ADDRESS           *deviceAddress, /* out */
+    void                           **mapping /* out */
+);
+
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_UNMAP)( 
+    EFI_PCI_IO_PROTOCOL   *self,
+    void                  *mapping
+);
+
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_ALLOCATE_BUFFER)( 
+    EFI_PCI_IO_PROTOCOL  *This,
+    EFI_ALLOCATE_TYPE    type,  /* ignored */
+    EFI_MEMORY_TYPE      memoryType,
+    uint64_t             pages,
+    void                 **hostAddress,
+    uint64_t             attributes
+);
+
+struct EFI_PCI_IO_PROTOCOL_CONFIG_ACCESS
+{   
+    EFI_PCI_IO_PROTOCOL_CONFIG       read;
+    EFI_PCI_IO_PROTOCOL_CONFIG       write;
+};
+
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_FREE_BUFFER)(
+    EFI_PCI_IO_PROTOCOL  *self,
+    uint64_t              pages,
+    void                 *hostAddress    /* in */
+);
+
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_FLUSH)( 
+    EFI_PCI_IO_PROTOCOL   *self
+);
+
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_GET_LOCATION)( 
+    EFI_PCI_IO_PROTOCOL *self,
+    uint64_t               *segmentNumber,
+    uint64_t               *busNumber,
+    uint64_t               *deviceNumber,
+    uint64_t               *functionNumber
+);
+
+typedef enum 
+{ 
+    EfiPciIoAttributeOperationGet, 
+    EfiPciIoAttributeOperationSet, 
+    EfiPciIoAttributeOperationEnable, 
+    EfiPciIoAttributeOperationDisable, 
+    EfiPciIoAttributeOperationSupported, 
+    EfiPciIoAttributeOperationMaximum
+} EFI_PCI_IO_PROTOCOL_ATTRIBUTE_OPERATION;
+
+typedef EFI_STATUS(*EFI_PCI_IO_PROTOCOL_ATTRIBUTES)( 
+    EFI_PCI_IO_PROTOCOL                     *This,
+    EFI_PCI_IO_PROTOCOL_ATTRIBUTE_OPERATION operation,
+    uint64_t                                  attributes,
+    uint64_t                                 *result  /* OPTIONAL  */
+);
 
 struct EFI_PCI_IO_PROTOCOL { 
     EFI_PCI_IO_PROTOCOL_POLL_IO_MEM        pollMem;

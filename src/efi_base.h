@@ -43,6 +43,13 @@ typedef enum
     EfiMaxMemoryType
 } EFI_MEMORY_TYPE;
 
+typedef enum 
+{
+    AllocateAnyPages,
+    AllocateMaxAddress,
+    AllocateAddress,
+    MaxAllocateType 
+} EFI_ALLOCATE_TYPE;
 
 typedef uint64_t EFI_STATUS;
 
