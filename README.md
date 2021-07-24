@@ -11,7 +11,7 @@ Proof of concept only. Don't expect this to ever be finished.
 * https://uefi.org/sites/default/files/resources/ACPI_6_3_final_Jan30.pdf
 * https://wiki.osdev.org/PCI#Base_Address_Registers
 * https://wiki.osdev.org/PCI_Express
-
+* https://github.com/Klaykap/BleskOS/blob/master/source/drivers/sound_hda.asm
 
 ## Microsoft x64 calling convention
 

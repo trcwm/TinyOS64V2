@@ -37,7 +37,7 @@ struct EFI_SIMPLE_TEXT_INPUT_PROTOCOL; // pre-declaration
 
 struct EFI_INPUT_KEY
 { 
-    uint64_t    m_scanCode;
+    uint16_t    m_scanCode;
     CHAR16      m_unicodeChar;
 };
 

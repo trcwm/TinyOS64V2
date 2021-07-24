@@ -136,7 +136,72 @@ static size_t toUDec(mi::PutLimitedString &output, uint32_t val)
     return chars;
 }
 
+static void format(mi::PutLimitedString &output, const char *fmt, va_list va)
+{
+    size_t tmp;
+    uint32_t vtmp;
+    char *charptr;
+    char ch;
 
+    while((ch=*(fmt++)) !=0)
+    {
+        if (ch != L'%')
+        {
+            output.putc(ch);
+        }
+        else
+        {
+            ch=*fmt++;
+            switch(ch)
+            {
+                case L'X':
+                    toHex(output, va_arg(va, uint64_t));
+                    break;
+                case L'x':
+                    toHex32(output, va_arg(va, uint32_t));
+                    break;                    
+                case L'u':
+                    tmp = toUDec(output, va_arg(va, uint32_t));
+                    break;
+                case L'd':
+                    vtmp =  va_arg(va, int32_t);
+                    if ((vtmp & 0x80000000) != 0)
+                    {
+                        // sign bit, we have a negative number
+                        vtmp = ~vtmp;   // invert bits
+                        vtmp++;         // add one
+
+                        output.putc(L'-');
+                        tmp = toUDec(output, vtmp);
+                    }
+                    else
+                    {
+                        tmp = toUDec(output, vtmp);
+                    }
+                    break;
+                case L'c':
+                    ch = va_arg(va, int);
+                    output.putc(ch);
+                    break;
+                case L's':
+                    charptr = va_arg(va, char*);
+                    while(*charptr != 0)
+                    {
+                        output.putc(*charptr++);
+                    }
+                    break;
+                case L'%':
+                    output.putc(L'%');
+                    break;
+                default:
+                    output.putc(L'?');
+                    break;
+            }
+        }
+    }
+}
+
+#if 0
 static void format(mi::PutLimitedString &output, const wchar_t *fmt, va_list va)
 {
     size_t tmp;
@@ -201,17 +266,14 @@ static void format(mi::PutLimitedString &output, const wchar_t *fmt, va_list va)
         }
     }
 }
+#endif
 
-size_t snprintf(wchar_t *s, size_t n, const wchar_t *fmt, va_list va)
+size_t snprintf(wchar_t *s, size_t n, const char *fmt, va_list va)
 {
-    //va_list va;
-    //va_start(va,fmt);
-
     mi::PutLimitedString outString(s, n);
 
-    format(outString,fmt,va);
+    format(outString, fmt,va);
     outString.terminate();
-    //va_end(va);
 
     return outString.getLength();
 }

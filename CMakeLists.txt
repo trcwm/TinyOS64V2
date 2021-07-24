@@ -19,7 +19,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions -fshort-wchar 
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Map=output.map")
 
-add_executable(boot 
+add_executable(boot
+    src/commands.cpp
+    src/pci.cpp
+    src/hdacodec.cpp
     src/myprint.cpp
     src/main.cpp)
 
