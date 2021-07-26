@@ -152,23 +152,38 @@ EFI_STATUS readKey(EFI_INPUT_KEY &key)
     return g_sysTbl->m_conIn->ReadKeyStroke(g_sysTbl->m_conIn, &key);
 }
 
+void setHighResolutionTextMode()
+{
+    uint64_t bestMode = 0;
+    uint64_t bestRows = 0;
+    uint64_t bestCols = 0;
+
+    uint64_t mode = 0;
+    uint64_t cols = 0;
+    uint64_t rows = 0;
+
+    auto status = g_sysTbl->m_conOut->m_queryMode(g_sysTbl->m_conOut, mode, &cols, &rows);
+    while(status == EFI_SUCCESS)
+    {
+        if (rows > bestRows)
+        {
+            bestRows = rows;
+            bestCols = cols;
+            bestMode = mode;
+        }
+        mode++;
+        status = g_sysTbl->m_conOut->m_queryMode(g_sysTbl->m_conOut, mode, &cols, &rows);
+    }
+
+    g_sysTbl->m_conOut->m_setMode(g_sysTbl->m_conOut, bestMode);
+    g_sysTbl->m_conOut->m_clearScreen(g_sysTbl->m_conOut);
+    g_sysTbl->m_conOut->m_enableCursor(g_sysTbl->m_conOut, 1);
+
+    print("Console: %d x %d\n\r", bestCols, bestRows);
+}
+
 extern "C"
 {
-
-
-    bool strncmp(const char *s1, const char *s2, size_t bytes)
-    {
-        for(size_t i=0; i<bytes; i++)
-        {
-            if (s1[i] != s2[i])
-                return false;
-            
-            // detect early end of strings
-            if ((s1[i] == 0) && (s2[i] == 0))
-                return true;
-        }
-        return true;
-    }
 
     void do_graphics()
     {
@@ -238,11 +253,12 @@ extern "C"
     void efi_init(EFI_HANDLE imageHandle, EFI_SYSTEM_TABLE *sysTbl)
     {
         g_sysTbl = sysTbl;
-
-        sysTbl->m_conOut->m_clearScreen(sysTbl->m_conOut);
-        sysTbl->m_conOut->m_enableCursor(sysTbl->m_conOut, 1);
-
+        
+        setHighResolutionTextMode();
         print("Hello, world! " __DATE__ " " __TIME__ "\n\r"); 
+
+        g_sysTbl->m_bootServices->m_setWatchdogTimer(0, 0, 0, NULL);
+        print("Watchdog disabled!\n\r");
 
 #if 0
         EFI_LOADED_IMAGE_PROTOCOL *loadedImage;
@@ -407,15 +423,30 @@ extern "C"
         }
 #endif
 
-        auto HDADeviceInfo =findHDAudioDevice();
-        
-        uint16_t *HDAPtr = (uint16_t*)(uint64_t)HDADeviceInfo.m_address;
+        auto HDADeviceInfo = findHDAudioDevice(0,0,0);
+        AudioDeviceResult audioDevice;
 
-        auto outStreams = (HDAPtr[0] >> 12) & 0xF;
-        auto inStreams  = (HDAPtr[0] >> 8)  & 0xF;
-        auto bidiStreams= (HDAPtr[0] >> 3)  & 0x1F;
-        auto dso = (HDAPtr[0] >> 1)  & 0x3;
-        auto has64 = HDAPtr[0] & 0x1;
+        while(HDADeviceInfo.m_valid)
+        {
+            audioDevice = HDADeviceInfo;
+            HDADeviceInfo = findHDAudioDevice(
+                HDADeviceInfo.m_bus,
+                HDADeviceInfo.m_device,
+                HDADeviceInfo.m_func+1);
+        }
+        
+        // set the command register
+        setPCICommandReg(audioDevice.m_bus, audioDevice.m_device, audioDevice.m_func, 0x0406);
+
+        print("Using codec address %x\n\r", audioDevice.m_address);
+        HDACodec codec(audioDevice.m_address);
+
+        uint64_t gcap = codec.readReg("gcap");
+        auto outStreams = (gcap >> 12) & 0xF;
+        auto inStreams  = (gcap >> 8)  & 0xF;
+        auto bidiStreams= (gcap >> 3)  & 0x1F;
+        auto dso = (gcap >> 1)  & 0x3;
+        auto has64 = gcap & 0x1;
 
         print("  output streams: %d\n\r", outStreams);
         print("  input  streams: %d\n\r", inStreams);
@@ -423,26 +454,107 @@ extern "C"
         print("  SDO           : %d\n\r", dso);
         print("  64-bit        : %s\n\r", (has64 ? "YES" : "NO"));
 
-        HDACodec codec(HDADeviceInfo.m_address);
-
         print("HDA version = %d.%d\n\r", codec.read8(0x03), codec.read8(0x02));
-        print("GCTL        = %x\n\r", codec.read32(0x08));
-        print("INTCTL      = %x\n\r", codec.read32(0x20));
+        print("GCTL        = %x\n\r", codec.readReg("gctl"));
+        print("INTCTL      = %x\n\r", codec.readReg("intctl"));
 
         // setup WAKEEN so that all attached codecs 
-        codec.write16(HDACodec::WAKEEN16, 0x7F);
+        codec.writeReg("wakeen", 0x7F);
 
         // see Chapter 4 of HDA spec.
-        codec.toggleReset();
+        codec.reset();
 
         // check STATESTS reg for available codecs
-        auto statests = codec.read16(HDACodec::STATESTS16);
+        auto statests = codec.readReg("statests");
         for(uint8_t bit=0; bit<15; bit++)
         {
             if (((statests >> bit) & 0x01) == 1)
             {
                 print("SDATA_IN[%d] has something connected\n\r", bit);
             }
+        }
+
+        print("ICS = %x\n\r", codec.readReg("ics"));
+
+        uint32_t codecID = 0;
+        codec.sendVerb(0,0,0xF00,0);
+        auto result = codec.readVerbResponse();
+        if (result.has_value())
+        {
+            codecID = result.value_or(0);
+            print("Codec ID = %x\n\r", codecID);
+        }
+        else
+        {
+            print("Error reading codec number\n\r");
+        }
+
+        // see 7.3.4.6 of HDA spec
+        uint32_t codecNum = 0;
+        uint32_t outputNode = 0;
+        for(uint32_t node=1; node<128; node++)
+        {
+            codec.sendVerb(codecNum, node, 0xF00, 0x09);
+            auto result = codec.readVerbResponse();
+            if (result.has_value())
+            {
+                if (result.value_or(0) == 0)
+                    continue;
+                
+                if (result.value_or(0) == 0xFFFFFFFF)
+                    continue;                    
+
+                uint32_t nodeType = (result.value_or(0) >> 20) & 0x0F;
+                switch(nodeType)
+                {
+                case 0: 
+                    print("Audio Output: %d\n\r", node);
+                    if (outputNode == 0)  
+                    {
+                        outputNode = node;
+                    }
+                    break;
+                case 1:
+                    print("Audio Input: %d\n\r", node);
+                    break;
+                case 2:
+                    print("Audio Mixer: %d\n\r", node);
+                    break;
+                case 3:
+                    print("Audio Selector: %d\n\r", node);
+                    break;                
+                case 4:
+                    print("Pin complex: %d\n\r", node);
+                    codec.sendVerb(codecNum, node, 0xF00, 0x0C);     // pin type
+                    result = codec.readVerbResponse();
+                    if (result.has_value())
+                    {
+                        auto pinTypeBits = result.value_or(0) & 0x30;
+                        if (pinTypeBits & 0x10)
+                            print("  output pin\n\r");
+                        if (pinTypeBits & 0x20)
+                            print("  input pin\n\r");
+                    }
+                    else
+                    {
+                        print("  UNKNOWN\n\r");
+                    }
+                    break;                                        
+                }
+            }
+            else
+            {
+                //print("Cannot read node %d\n\r", node);
+            }
+        }
+
+        if (!codec.setOutputNode(outputNode))
+        {
+            print("SetOutputNode failed!\n\r");
+        }
+        else
+        {
+            print("SetOutputNode OK!\n\r");
         }
 
         size_t consoleBufferIdx = 0;

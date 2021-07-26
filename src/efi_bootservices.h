@@ -37,6 +37,20 @@ typedef EFI_STATUS (*EFI_WAIT_FOR_EVENT)(
     uint64_t    *index  /* out */
 );
 
+typedef EFI_STATUS (*EFI_SET_WATCHDOG_TIMER)(
+    uint64_t    timeout,
+    uint64_t    watchdogCode,
+    uint64_t    dataSize,
+    CHAR16*     watchdogData
+);
+
+typedef EFI_STATUS (*EFI_ALLOCATE_PAGES)(
+    EFI_ALLOCATE_TYPE Type,
+    EFI_MEMORY_TYPE MemoryType,
+    uint64_t Pages,
+    EFI_PHYSICAL_ADDRESS* Memory
+);
+
 struct EFI_BOOT_SERVICES
 {
     EFI_TABLE_HEADER        m_header;
@@ -44,7 +58,7 @@ struct EFI_BOOT_SERVICES
     void*                   m_restoreTpl;
 
     // memory services
-    void*                   m_allocatePages;
+    EFI_ALLOCATE_PAGES      m_allocatePages;
     void*                   m_freePages;
     EFI_GET_MEMORY_MAP      m_getMemoryMap;
     EFI_ALLOCATE_POOL       m_allocatePool;
@@ -79,7 +93,7 @@ struct EFI_BOOT_SERVICES
     // misc services
     void*                   m_getNextMonotonicCount;
     void*                   m_stall;
-    void*                   m_setWatchdogTimer;
+    EFI_SET_WATCHDOG_TIMER  m_setWatchdogTimer;
 
     // driver support
     void*                   m_connectController;

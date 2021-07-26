@@ -14,6 +14,10 @@ typedef EFI_STATUS (*EFI_TEXT_RESET)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *self, BOOL
 typedef EFI_STATUS (*EFI_TEXT_STRING)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *self, CHAR16 *str);
 typedef EFI_STATUS (*EFI_TEXT_CLEAR_SCREEN)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *self);
 typedef EFI_STATUS (*EFI_TEXT_ENABLE_CURSOR)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *self, BOOLEAN visible);
+typedef EFI_STATUS (*EFI_TEXT_QUERY_MODE)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *self,
+ uint64_t modeNumber,  uint64_t *columns, uint64_t *rows);
+
+typedef EFI_STATUS (*EFI_TEXT_SET_MODE)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *self, uint64_t modeNumber);
 
 // see: "12.4 Simple Text Output Protocol"
 struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL
@@ -21,8 +25,8 @@ struct EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL
     EFI_TEXT_RESET          m_reset;
     EFI_TEXT_STRING         m_outputString;
     void*                   m_testString;
-    void*                   m_queryMode;
-    void*                   m_setMode;
+    EFI_TEXT_QUERY_MODE     m_queryMode;
+    EFI_TEXT_SET_MODE       m_setMode;
     void*                   m_setAttribute;
     EFI_TEXT_CLEAR_SCREEN   m_clearScreen;
     void*                   m_setCursorPosition;

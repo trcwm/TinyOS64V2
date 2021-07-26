@@ -1,4 +1,5 @@
 #include <array>
+#include <optional>
 #include "commands.h"
 
 
@@ -14,6 +15,98 @@ extern "C"
                 return s1[-1] < s2[-1] ? -1 : 1;
         }
         return 0;    
+    }
+}
+
+
+constexpr bool isAlpha(char c)
+{
+    if ((c>='a') && (c<='z')) return true;
+    if ((c>='A') && (c<='Z')) return true;
+    return false;
+}
+
+constexpr bool isNumeric(char c)
+{
+    if ((c>='0') && (c<='9')) return true;
+    return false;
+}
+
+constexpr bool isHex(char c)
+{
+    if ((c>='0') && (c<='9')) return true;
+    if ((c>='a') && (c<='f')) return true;
+    if ((c>='A') && (c<='F')) return true;
+    return false;
+}
+
+static constexpr uint32_t hexchar2value(char c)
+{
+    if ((c >= '0') && (c <= '9'))
+        return (c-'0') & 0x0F;
+    if ((c >= 'a') && (c <= 'f'))
+        return (c-'a'+10) & 0x0F;
+    if ((c >= 'A') && (c <= 'F'))
+        return (c-'A'+10) & 0x0F;
+    
+    return 0;
+}
+
+std::optional<uint64_t> valueFromHexStr(const std::string_view &str)
+{
+    uint64_t value = 0;
+    
+    // note, first char is '$' so we skip that!
+    for(uint32_t i=1; i<str.size(); i++)
+    {
+        char c = str[i];
+        if (isHex(c))
+        {
+            value << 4;
+            value |= hexchar2value(c);
+        }   
+        else
+        {
+            // error! not an integer
+            return std::nullopt;
+        }
+    }    
+    return value;
+}
+
+std::optional<uint64_t> valueFromDecStr(const std::string_view &str)
+{
+    uint64_t value = 0;
+    for(uint32_t i=0; i<str.size(); i++)
+    {
+        char c = str[i];
+        if (isNumeric(c))
+        {
+            value *= 10;
+            value += c - '0';
+        }   
+        else
+        {
+            // error! not an integer
+            return std::nullopt;
+        }
+    }    
+    return value;
+}
+
+std::optional<uint64_t> valueFromStr(const std::string_view &str)
+{
+    if (str.size() == 0)
+        return std::nullopt;
+
+    // hex always starts with '$'
+    if (str[0] == '$')
+    {
+        return valueFromHexStr(str);
+    }
+    else
+    {
+        return valueFromDecStr(str);
     }
 }
 
@@ -68,30 +161,34 @@ static bool cmdTest(HDACodec &codec, const std::string_view &params)
 static bool cmdReadCodecRegister(HDACodec &codec, const std::string_view &params)
 {
     // read regname
-
     auto regname = findNextParam(params);
 
-    if (regname.m_param == "gctl")
-    {
-        print("GCTL = $%x\n\r", codec.read32(HDACodec::GCTL32));
-        return true;
-    }
+    auto result = codec.readReg(regname.m_param);
+    print("%s = $%x\n\r", regname.m_param.data(), result);
+    return true;
+}
 
-    if (regname.m_param == "wakeen")
-    {
-        print("WAKEEN = $%x\n\r", codec.read16(HDACodec::WAKEEN16));
-        return true;        
-    }
+static bool cmdWriteCodecRegister(HDACodec &codec, const std::string_view &params)
+{
+    // read regname
+    auto regname = findNextParam(params);
 
-    if (regname.m_param == "statests")
+    // read hex value
+    auto regvalue = findNextParam(regname.m_remainder);
+    auto value = valueFromStr(regvalue.m_param);
+
+    if (value.has_value())
     {
-        print("STATESTS = $%x\n\r", codec.read16(HDACodec::HDACodec::STATESTS16));
-        return true;        
+        print("%s <= $%x\n\r", regname.m_param.data(), value.value_or(0));
+        return codec.writeReg(regname.m_param, value.value_or(0));
+    }
+    else
+    {
+        print("Invalid value %s\n\r", regvalue.m_param);
     }
 
     return false;
 }
-
 
 struct commandDef
 {
@@ -99,9 +196,9 @@ struct commandDef
     commandPrototype m_func;
 };
 
-static constexpr const std::array<commandDef, 1> g_commands {
+static constexpr const std::array<commandDef, 2> g_commands {
     {{"read", cmdReadCodecRegister},
-     //{"write", cmdTest},
+     {"write", cmdWriteCodecRegister}
      //{"read", cmdTest}}
     }
 };
@@ -131,3 +228,4 @@ std::string_view Commands::getCommand(const std::string_view &line) const
 
     return std::string_view(line.data(), last_idx);
 }
+
