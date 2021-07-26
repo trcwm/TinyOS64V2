@@ -73,7 +73,7 @@ void HDACodec::inputStreamTurnOn()
 
 void HDACodec::outputStreamTurnOn()
 {
-    write32(m_inputDescriptor, 0x00140002);
+    write32(m_outputDescriptor, 0x00140002);
 }
 
 bool HDACodec::setOutputNode(uint32_t node)

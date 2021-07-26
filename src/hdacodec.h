@@ -30,7 +30,7 @@ public:
         }
 
         m_audioBuffer = 0xFFFFFFFF;
-        auto result = g_sysTbl->m_bootServices->m_allocatePages(AllocateMaxAddress,
+        result = g_sysTbl->m_bootServices->m_allocatePages(AllocateMaxAddress,
             EfiRuntimeServicesData, 16, &m_audioBuffer);
 
         if (result != EFI_SUCCESS)
@@ -41,6 +41,13 @@ public:
         {
             print("Allocated memory for codec audio at 0x%x!\n\r", m_audioBuffer);
         }        
+
+        // fill audio buffer with crap..
+        int16_t *buffer = (int16_t*)m_audioBuffer;
+        for(size_t i=0; i<16*4096/4; i++)
+        {
+            buffer[i] = static_cast<int16_t>(i*20);
+        }
     }
 
     struct RegDef
@@ -50,7 +57,7 @@ public:
         const char *name;
     };
 
-    constexpr static std::array<RegDef, 42> regs =
+    constexpr static std::array<RegDef, 42+9> regs =
     {{
         {0x00, 2, "gcap"},
         {0x02, 1, "vmin"},
@@ -93,7 +100,17 @@ public:
         {0x9C, 2, "sdnbdpu"},
         {0x60, 4, "icw"},
         {0x64, 4, "irr"},
-        {0x68, 2, "ics"}
+        {0x68, 2, "ics"},
+
+        {0x80+0x80, 4, "osdnctl"},    // for lower 8 bits: software must use 0‟s for writes to bits.
+        {0x83+0x80, 1, "osdnsts"},    // software must use 0‟s for writes to bits.
+        {0x84+0x80, 4, "osdnlpib"},
+        {0x88+0x80, 4, "osdncbl"},
+        {0x8C+0x80, 4, "osdnlvi"},
+        {0x90+0x80, 2, "osdnfifos"},
+        {0x92+0x80, 2, "osdnfmt"},
+        {0x98+0x80, 4, "osdnbdpl"},
+        {0x9C+0x80, 2, "osdnbdpu"}
     }};
 
     constexpr std::optional<RegDef> getReg(const std::string_view &regname) const
@@ -203,7 +220,6 @@ public:
     void outputStreamSetDescriptorList();
     void outputStreamLength(size_t length);
     void outputStreamFormat(const StreamFormat &format);
-    void setOutputAudioBuffer(void *data, size_t length);
 
     void setSSync();
     bool setOutputNode(uint32_t node);    

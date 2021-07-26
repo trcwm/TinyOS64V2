@@ -463,6 +463,9 @@ extern "C"
 
         // see Chapter 4 of HDA spec.
         codec.reset();
+        codec.disableInterrupt();
+        codec.turnOffCorbRirbDmapos();
+        codec.outputStreamTurnOff();
 
         // check STATESTS reg for available codecs
         auto statests = codec.readReg("statests");
@@ -556,6 +559,14 @@ extern "C"
         {
             print("SetOutputNode OK!\n\r");
         }
+
+        HDACodec::StreamFormat streamFormat;
+        streamFormat.m_value = (1<<4) /* 16 bits packed */ | 1 /* stereo */;
+        
+        codec.outputStreamSetDescriptorList();
+        codec.outputStreamLength(16*4096);
+        codec.outputStreamFormat(streamFormat);
+        codec.playSound(16*4096, streamFormat);
 
         size_t consoleBufferIdx = 0;
         char consoleBuffer[256];
