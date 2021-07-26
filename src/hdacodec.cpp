@@ -52,20 +52,24 @@ void HDACodec::turnOffCorbRirbDmapos()
     writeReg("dplbase", 0);
 }
 
+#if 0
 void HDACodec::inputStreamTurnOff()
 {
     write32(m_inputDescriptor, 0x00200000);
 }
+#endif
 
 void HDACodec::outputStreamTurnOff()
 {
     write32(m_inputDescriptor, 0x00140000);
 }
 
+#if 0
 void HDACodec::inputStreamTurnOn()
 {
     write32(m_inputDescriptor, 0x00140002);
 }
+#endif
 
 void HDACodec::outputStreamTurnOn()
 {
@@ -94,6 +98,7 @@ bool HDACodec::setOutputNode(uint32_t node)
     return true;
 }
 
+#if 0
 void HDACodec::inputStreamSetBuffer(size_t address)
 {
     write32(m_inputDescriptor+0x18, address);
@@ -101,23 +106,27 @@ void HDACodec::inputStreamSetBuffer(size_t address)
 
     write32(m_inputDescriptor+0x0C, 1); // last valid index: two entries
 }
+#endif
 
-void HDACodec::outputStreamSetBuffer(size_t address)
+void HDACodec::outputStreamSetDescriptorList()
 {
-    write32(m_outputDescriptor+0x18, address);
+    write32(m_outputDescriptor+0x18, m_descriptorBuffer);
     write32(m_outputDescriptor+0x18+4, 0);
-
     write32(m_outputDescriptor+0x0C, 1); // last valid index: two entries
-}
 
-void HDACodec::setOutputBuffer(void *data, size_t length)
-{
-    
+    uint32_t* descriptorListPtr = (uint32_t*)m_descriptorBuffer;
+    descriptorListPtr[0] = m_audioBuffer;
+    descriptorListPtr[1] = 0;
+    descriptorListPtr[2] = 4096*16;
+    descriptorListPtr[3] = 0;
+    descriptorListPtr[4] = m_audioBuffer;
+    descriptorListPtr[5] = 0;
+    descriptorListPtr[6] = 4096*16;
+    descriptorListPtr[7] = 0;
 }
 
 void HDACodec::setSSync()
-{
-    
+{    
 }
 
 void HDACodec::outputStreamLength(size_t length)
@@ -130,9 +139,9 @@ void HDACodec::outputStreamFormat(const StreamFormat &format)
     write32(m_outputDescriptor+0x12, format.m_value);
 }
 
-void HDACodec::playSound(void *data, size_t length, const StreamFormat &format)
+void HDACodec::playSound(size_t length, const StreamFormat &format)
 {
-    outputStreamSetBuffer((size_t)data);
+    outputStreamSetDescriptorList();
     outputStreamLength(length);
     outputStreamFormat(format);
     outputStreamTurnOn();

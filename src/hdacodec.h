@@ -6,13 +6,42 @@
 #include <array>
 
 #include "helpers.h"
+#include "efi.h"
 
 extern size_t print(const char *fmt, ...);
+extern EFI_SYSTEM_TABLE *g_sysTbl;
 
 class HDACodec
 {
 public:
-    HDACodec(uint32_t baseAddress) : m_base((void*)(uint64_t)baseAddress) {}
+    HDACodec(uint32_t baseAddress) : m_base((void*)(uint64_t)baseAddress) 
+    {
+        m_descriptorBuffer = 0xFFFFFFFF;
+        auto result = g_sysTbl->m_bootServices->m_allocatePages(AllocateMaxAddress,
+            EfiRuntimeServicesData, 1, &m_descriptorBuffer);
+
+        if (result != EFI_SUCCESS)
+        {
+            print("Failed to allocate memory for codec descriptor buffer!\n\r");
+        }
+        else
+        {
+            print("Allocated memory for codec buffer at 0x%x!\n\r", m_descriptorBuffer);
+        }
+
+        m_audioBuffer = 0xFFFFFFFF;
+        auto result = g_sysTbl->m_bootServices->m_allocatePages(AllocateMaxAddress,
+            EfiRuntimeServicesData, 16, &m_audioBuffer);
+
+        if (result != EFI_SUCCESS)
+        {
+            print("Failed to allocate memory for codec audio buffer!\n\r");
+        }
+        else
+        {
+            print("Allocated memory for codec audio at 0x%x!\n\r", m_audioBuffer);
+        }        
+    }
 
     struct RegDef
     {
@@ -165,21 +194,21 @@ public:
 
     void disableInterrupt();
     void turnOffCorbRirbDmapos();
-    void inputStreamTurnOff();
+    //void inputStreamTurnOff();
     void outputStreamTurnOff();
-    void inputStreamTurnOn();
+    //void inputStreamTurnOn();
     void outputStreamTurnOn();
-    void inputStreamSetBuffer(size_t address);
-    void outputStreamSetBuffer(size_t address);
+    //void inputStreamSetBuffer(size_t address);
+
+    void outputStreamSetDescriptorList();
     void outputStreamLength(size_t length);
     void outputStreamFormat(const StreamFormat &format);
-
-    void setOutputBuffer(void *data, size_t length);
+    void setOutputAudioBuffer(void *data, size_t length);
 
     void setSSync();
     bool setOutputNode(uint32_t node);    
 
-    void playSound(void *data, size_t length, const StreamFormat &format);
+    void playSound(size_t length, const StreamFormat &format);
     void stopSound();
 
     void sendVerb(uint32_t codec, uint32_t node, uint32_t verb, uint32_t command);
@@ -196,7 +225,8 @@ public:
     volatile uint64_t read64(size_t offset) const;
 
 protected:
-    int32_t *m_data;
+    EFI_PHYSICAL_ADDRESS m_descriptorBuffer;
+    EFI_PHYSICAL_ADDRESS m_audioBuffer;
     size_t  m_inputDescriptor;
     size_t  m_outputDescriptor;
 
