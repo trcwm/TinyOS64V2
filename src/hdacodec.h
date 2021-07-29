@@ -36,9 +36,36 @@ enum class DefaultDevice
     Speaker,
     LineIn,
     MicIn,
-    HeadphoneOut
+    HeadphoneOut,
+    SPDIFin,
+    SPDIFout
 };
 
+enum class Location
+{
+    Unknown,
+    Front,
+    Rear,
+    Left,
+    Right
+};
+
+struct JackInfo
+{
+    JackInfo() : m_colour(0), m_location(Location::Unknown), m_isPhysical(false), m_isInternal(false) {};
+
+    uint32_t m_colour;    
+    Location m_location;
+    bool m_isPhysical;
+    bool m_isInternal;
+
+    static constexpr std::array<const char *, 16> colours =
+    {{
+        "Unknown", "Black", "Grey", "Blue", "Green", "Red",
+        "Orange", "Yellow", "Purple", "Pink", "Reserved",
+        "White", "Other"
+    }};    
+};
 
 struct Amp
 {
@@ -82,7 +109,7 @@ struct Widget
         m_hasMute   = false;
         m_hasInputAmp  = false;
         m_hasOutputAmp = false;
-        m_jackColour = 0;
+        m_supportedStreams = 0;
     }
 
     WidgetID   m_ID;
@@ -102,14 +129,9 @@ struct Widget
     bool                m_hasMute;
     bool                m_hasInputAmp;
     bool                m_hasOutputAmp;
-    uint32_t            m_jackColour;
+    uint32_t            m_supportedStreams;
 
-    static constexpr std::array<const char *, 16> colours =
-    {{
-        "Unknown", "Black", "Grey", "Blue", "Green", "Red",
-        "Orange", "Yellow", "Purple", "Pink", "Reserved",
-        "White", "Other"
-    }};
+    JackInfo            m_jackInfo;
 
     void dump();
 };
@@ -360,3 +382,5 @@ protected:
 
     void *m_base;
 };
+
+void refreshWidget(HDACodec &codec, HDA::Widget &w);

@@ -46,7 +46,7 @@ extern "C"
         }
     }
 
-#if 0
+#if 1
     int memcmp(const char *s1, const char *s2, size_t count)
     {
         while (count-- > 0)

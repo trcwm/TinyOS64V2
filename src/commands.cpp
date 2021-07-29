@@ -5,20 +5,6 @@
 
 extern size_t print(const char *fmt, ...);
 
-extern "C"
-{
-    int memcmp(const char *s1, const char *s2, size_t count)
-    {
-        while (count-- > 0)
-        {
-            if (*s1++ != *s2++)
-                return s1[-1] < s2[-1] ? -1 : 1;
-        }
-        return 0;    
-    }
-}
-
-
 constexpr bool isAlpha(char c)
 {
     if ((c>='a') && (c<='z')) return true;
@@ -62,7 +48,7 @@ std::optional<uint64_t> valueFromHexStr(const std::string_view &str)
         char c = str[i];
         if (isHex(c))
         {
-            value << 4;
+            value <<= 4;
             value |= hexchar2value(c);
         }   
         else
@@ -223,6 +209,70 @@ static void showSelection(HDACodec &codec, uint32_t nodeNum)
 }
 #endif
 
+static bool cmdUnmute(HDACodec &codec, const std::string_view &params)
+{
+    auto widgetParam = findNextParam(params);
+    auto widgetID = valueFromStr(widgetParam.m_param).value_or(0);
+
+    auto channelParam = findNextParam(widgetParam.m_remainder);
+    auto channel = valueFromStr(channelParam.m_param).value_or(0);
+
+    auto gainSetting = 0x7F;
+    if (codec.m_widgets[widgetID].m_outputAmp.m_valid)
+    {
+        gainSetting = codec.m_widgets[widgetID].m_outputAmp.m_0dBSetting;
+    }
+    else if (codec.m_widgets[widgetID].m_inputAmps.size() > 0)
+    {
+        gainSetting = codec.m_widgets[widgetID].m_inputAmps[0].m_0dBSetting;
+    }
+
+    print("Unmuting channel %d on node %d (gain = %d)\n\r", channel, widgetID, gainSetting);
+
+    codec.sendVerb(0, widgetID, 0x0300, 0x7000 | ((channel & 0xF) << 8) | gainSetting);
+    auto dummy = codec.readVerbResponse();
+
+    codec.sendVerb(0, widgetID, 0x0300, 0xB000 | gainSetting);
+    dummy = codec.readVerbResponse();
+
+    return true;
+}
+
+static bool cmdRefresh(HDACodec &codec, const std::string_view &params)
+{
+    for(auto& widget : codec.m_widgets)
+    {
+        refreshWidget(codec, widget);
+    };
+
+    return true;
+}
+
+static bool cmdNodeIO(HDACodec &codec, const std::string_view &params)
+{
+    auto widgetParam = findNextParam(params);
+    auto widgetID = valueFromStr(widgetParam.m_param).value_or(0);
+
+    auto verbParam = findNextParam(widgetParam.m_remainder);
+    auto verb = valueFromStr(verbParam.m_param).value_or(0);
+  
+    auto payloadParam = findNextParam(verbParam.m_remainder);
+    auto payload = valueFromStr(payloadParam.m_param).value_or(0);
+
+    print("NodeIO: %d verb: %x  payload %x\n\r", widgetID, verb, payload);
+    codec.sendVerb(0, widgetID, verb, payload);
+
+    auto result = codec.readVerbResponse();
+    if (result.has_value())
+    {
+        print("  retuned: %x\n\r", result.value_or(0));
+    }
+    else
+    {
+        print("  ** no response! **\n\r");
+    }
+    return true;
+}
 
 static bool cmdDisplayNode(HDACodec &codec, const std::string_view &params)
 {
@@ -649,10 +699,13 @@ struct commandDef
     commandPrototype m_func;
 };
 
-static constexpr const std::array<commandDef, 3> g_commands {
+static constexpr const std::array<commandDef, 6> g_commands {
     {{"read", cmdReadCodecRegister},
      {"write", cmdWriteCodecRegister},
-     {"node", cmdDisplayNode}
+     {"node", cmdDisplayNode},
+     {"unmute", cmdUnmute},
+     {"refresh", cmdRefresh},
+     {"nodeio", cmdNodeIO}
     }
 };
 

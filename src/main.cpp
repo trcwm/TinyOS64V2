@@ -522,10 +522,26 @@ extern "C"
             print("Error reading codec number\n\r");
         }
 
+        // find all output pins with headphone jack
+        for(auto const& widget : codec.m_widgets)
+        {
+            if (widget.m_type != HDA::WidgetType::PinComplex)
+                continue;
+
+            if ((widget.m_defaultDevice != HDA::DefaultDevice::LineOut) &&
+                (widget.m_defaultDevice != HDA::DefaultDevice::HeadphoneOut))
+                continue;
+
+            if (!widget.m_outputPin)
+                continue;
+
+            print("Viable output pin node: %d\n\r", widget.m_ID);
+        }
+
         // see 7.3.4.6 of HDA spec
         uint32_t codecNum = 0;
         uint32_t outputNode = 2;    // hard code for now.
-        
+
         if (!codec.setOutputNode(outputNode))
         {
             print("SetOutputNode failed!\n\r");
@@ -541,11 +557,15 @@ extern "C"
         codec.outputStreamSetDescriptorList();
         codec.outputStreamLength(16*4096);
         codec.outputStreamFormat(streamFormat);
-        codec.playSound(16*4096, streamFormat);
-
+        
         size_t consoleBufferIdx = 0;
         char consoleBuffer[256];
         Commands commands(codec);
+
+        commands.execute(std::string_view("unmute 12 0")); 
+        commands.execute(std::string_view("unmute 27 0")); 
+
+        codec.playSound(16*4096, streamFormat);
 
         print(">");
         while(1)

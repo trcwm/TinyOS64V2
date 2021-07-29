@@ -176,6 +176,13 @@ std::optional<uint32_t> HDACodec::readVerbResponse()
     return readReg("irr");
 }
 
+static uint32_t getSupportedStreams(HDACodec &codec, uint32_t widgetID)
+{
+    codec.sendVerb(0, widgetID, 0xF00, 0x0A);   // supported stream
+    auto result = codec.readVerbResponse();
+    return result.value_or(0);
+}
+
 static HDA::Amp getOutputAmplifierInfo(HDACodec &codec, uint32_t widgetID)
 {
     // check output amplifier
@@ -187,8 +194,13 @@ static HDA::Amp getOutputAmplifierInfo(HDACodec &codec, uint32_t widgetID)
     auto ampCap = result.value_or(0);
     if (ampCap != 0)
     {
-        amp.m_canMute = ((ampCap >> 31) & 0x01) > 0;
+        amp.m_canMute = ((ampCap >> 31) & 0x01) != 0;
+        amp.m_0dBSetting = ampCap & 0x7F;
         amp.m_valid = true;
+    }
+    else
+    {
+        return amp;
     }
 
     codec.sendVerb(0, widgetID, 0xB00, (1<<15) /* output amp R */);
@@ -222,7 +234,7 @@ static HDA::Amp getInputAmplifierInfo(HDACodec &codec, uint32_t widgetID, uint32
     auto ampCap = result.value_or(0);
     if (ampCap != 0)
     {
-        amp.m_canMute = ((ampCap >> 31) & 0x01) > 0;
+        amp.m_canMute = ((ampCap >> 31) & 0x01) != 0;
         amp.m_0dBSetting = ampCap & 0x7F;
         amp.m_valid = true;
     }
@@ -236,7 +248,7 @@ static HDA::Amp getInputAmplifierInfo(HDACodec &codec, uint32_t widgetID, uint32
     settings = result.value_or(0);
     if (result.has_value())
     {
-        amp.m_muted[1]  = (((settings >> 7) & 1) != 0);
+        amp.m_muted[1]  = (((settings >> 7) & 0x01) != 0);
         amp.m_volume[1] = settings & 0x7F;
     }
 
@@ -245,7 +257,7 @@ static HDA::Amp getInputAmplifierInfo(HDACodec &codec, uint32_t widgetID, uint32
     settings = result.value_or(0);
     if (result.has_value())
     {
-        amp.m_muted[0]  = (((settings >> 7) & 1) != 0);
+        amp.m_muted[0]  = (((settings >> 7) & 0x01) != 0);
         amp.m_volume[0] = settings & 0x7F;
     }
 
@@ -288,9 +300,11 @@ void HDACodec::collectWidgetInformation()
             {
             case 0: // Output (DAC)
                 widget.m_type = HDA::WidgetType::Output;
+                widget.m_supportedStreams = getSupportedStreams(*this, widgetID);
                 break;
             case 1: // Input (ADC)
                 widget.m_type = HDA::WidgetType::Input;
+                widget.m_supportedStreams = getSupportedStreams(*this, widgetID);
                 break;
             case 2: // Mixer 
                 widget.m_type = HDA::WidgetType::Mixer;
@@ -321,10 +335,34 @@ void HDACodec::collectWidgetInformation()
                     uint32_t connectivity = (config >> 30) & 0x3;
                     uint32_t defaultDevice = (config >> 20) & 0xF;
                     uint32_t connType = (config >> 16) & 0xF;
-                    widget.m_jackColour = (config >> 12) & 0xF;
+                    widget.m_jackInfo.m_colour = (config >> 12) & 0xF;
                     uint32_t misc = (config >> 8) & 0xF;
                     uint32_t defaultAss = (config >> 4) & 0xF;
                     uint32_t sequence = config & 0xF;
+                    uint32_t jackLocation = (config >> 24) & 0xF;
+
+                    if (connectivity != 1)
+                    {
+                        widget.m_jackInfo.m_isPhysical = true;
+                    }
+
+                    switch(jackLocation)
+                    {
+                    case 1:
+                        widget.m_jackInfo.m_location = HDA::Location::Rear;
+                        break;
+                    case 2:
+                        widget.m_jackInfo.m_location = HDA::Location::Front;
+                        break;                        
+                    case 3:
+                        widget.m_jackInfo.m_location = HDA::Location::Left;
+                        break;                                                
+                    case 4:
+                        widget.m_jackInfo.m_location = HDA::Location::Right;
+                        break;                                                                    
+                    default:
+                        break;
+                    }
 
                     switch(defaultDevice)
                     {
@@ -337,12 +375,18 @@ void HDACodec::collectWidgetInformation()
                     case 2:
                         widget.m_defaultDevice = HDA::DefaultDevice::HeadphoneOut;
                         break;
+                    case 4:
+                        widget.m_defaultDevice = HDA::DefaultDevice::SPDIFout;
+                        break;                    
                     case 8:
                         widget.m_defaultDevice = HDA::DefaultDevice::LineIn;
-                        break;                               
+                        break;                    
                     case 0xA:
                         widget.m_defaultDevice = HDA::DefaultDevice::MicIn;
                         break;
+                    case 0xC:
+                        widget.m_defaultDevice = HDA::DefaultDevice::SPDIFin;
+                        break;                        
                     default:
                         break;
                     }
@@ -420,16 +464,26 @@ void HDACodec::collectWidgetInformation()
                 }
             }
 
-            // input and output amplifiers            
-            widget.m_inputAmps.resize(widget.m_channels);
-            size_t ch = 0;
-            for(auto &amp : widget.m_inputAmps)
+            if (widget.m_hasInputAmp)
             {
-                 amp = getInputAmplifierInfo(*this, widgetID, ch);
-                 ch++;
-            };
+                // input and output amplifiers
+                uint32_t numberOfAmps = 1;
+                if (widget.m_type == HDA::WidgetType::Mixer)
+                    numberOfAmps = widget.m_connectionList.size();
 
-            widget.m_outputAmp = getOutputAmplifierInfo(*this, widgetID);
+                widget.m_inputAmps.resize(numberOfAmps);
+                size_t ch = 0;
+                for(auto &amp : widget.m_inputAmps)
+                {
+                    amp = getInputAmplifierInfo(*this, widgetID, ch);
+                    ch++;
+                };
+            }
+
+            if (widget.m_hasOutputAmp)
+            {
+                widget.m_outputAmp = getOutputAmplifierInfo(*this, widgetID);
+            }
         }
         
         m_widgets[widgetID] = widget;
@@ -448,23 +502,116 @@ static void dumpAmp(const HDA::Amp &amp)
         print("  %s: %d", side[t], amp.m_volume[t]);
         if (amp.m_canMute)
         {
-            print(" mute state: %s\t", amp.m_muted ? "MUTED" : "unmuted");
+            print(" state: %s      ", amp.m_muted[t] ? "MUTED" : "unmuted");
         }
     }
     print("\n\r");
 }
 
+static void dumpSupportedStreams(const uint32_t supportedStreams)
+{
+    if ((supportedStreams & 1) != 0)
+    {
+        print("  8000 sps\n\r");
+    }
+    if ((supportedStreams & 2) != 0)
+    {
+        print("  11025 sps\n\r");
+    }
+    if ((supportedStreams & 4) != 0)
+    {
+        print("  16000 sps\n\r");
+    }
+    if ((supportedStreams & 8) != 0)
+    {
+        print("  22050 sps\n\r");
+    }                   
+    if ((supportedStreams & 16) != 0)
+    {
+        print("  32000 sps\n\r");
+    }
+    if ((supportedStreams & 32) != 0)
+    {
+        print("  44100 sps\n\r");
+    }                    
+    if ((supportedStreams & 64) != 0)
+    {
+        print("  48000 sps\n\r");
+    }
+    if ((supportedStreams & 128) != 0)
+    {
+        print("  88200 sps\n\r");
+    }
+    if ((supportedStreams & 256) != 0)
+    {
+        print("  96000 sps\n\r");
+    }     
+    if ((supportedStreams & 512) != 0)
+    {
+        print("  1764000 sps\n\r");
+    }                    
+    if ((supportedStreams & 1024) != 0)
+    {
+        print("  1920000 sps\n\r");
+    }                         
+    if ((supportedStreams & 2048) != 0)
+    {
+        print("  3840000 sps\n\r");
+    }      
+
+    if (((supportedStreams >> 16) & 1) != 0)
+    {
+        print("  8-bit stream\n\r");
+    }
+    if (((supportedStreams >> 17) & 1) != 0)
+    {
+        print("  16-bit stream\n\r");
+    }   
+    if (((supportedStreams >> 18) & 1) != 0)
+    {
+        print("  20-bit stream\n\r");
+    }      
+    if (((supportedStreams >> 19) & 1) != 0)
+    {
+        print("  24-bit stream\n\r");
+    }
+    if (((supportedStreams >> 20) & 1) != 0)
+    {
+        print("  32-bit stream\n\r");
+    }        
+}
+
 static void dumpInput(const HDA::Widget &w)
 {
-    print("  input amplifiers:\n\r");
-    for(uint32_t i=0; i<w.m_channels; i++)
+    if (w.m_hasInputAmp)
     {
-        print("  ch %d ", i);
-        dumpAmp(w.m_inputAmps[i]);
+        print("  input amplifiers:\n\r");
+        for(uint32_t i=0; i<w.m_inputAmps.size(); i++)
+        {
+            print("  ch %d ", i);
+            dumpAmp(w.m_inputAmps[i]);
+        }
     }
 
-    print("  output amplifier:\n\r");
-    dumpAmp(w.m_outputAmp);
+    if (w.m_hasOutputAmp)
+    {
+        print("  output amplifier:\n\r");
+        dumpAmp(w.m_outputAmp);
+    }
+
+    if (w.m_connectionList.size() > 0)
+    {
+        print("  connected to nodes: ");
+        size_t oID = 0;
+        for(auto o : w.m_connectionList)
+        {
+            print("%d ", o);
+            oID++;
+        }
+        print("\n\r");
+    }
+
+    dumpSupportedStreams(w.m_supportedStreams);
 }
 
 static void dumpOutput(const HDA::Widget &w)
@@ -472,7 +619,49 @@ static void dumpOutput(const HDA::Widget &w)
     if (w.m_hasInputAmp)
     {
         print("  input amplifiers:\n\r");
-        for(uint32_t i=0; i<w.m_channels; i++)
+        for(uint32_t i=0; i<w.m_inputAmps.size(); i++)
+        {
+            print("  ch %d ", i);
+            dumpAmp(w.m_inputAmps[i]);
+        }
+    }
+
+    if (w.m_hasOutputAmp)
+    {
+        print("  output amplifier: ");
+        dumpAmp(w.m_outputAmp);
+    }
+
+    if (w.m_connectionList.size() > 0)
+    {
+        print("  connected to nodes: ");
+        size_t oID = 0;
+        for(auto o : w.m_connectionList)
+        {
+            print("%d ", o);
+            oID++;
+        }
+        print("\n\r");
+    }
+
+    dumpSupportedStreams(w.m_supportedStreams);
+}
+
+static void dumpMixer(const HDA::Widget &w)
+{
+    print("  input come from nodes: ");
+    size_t oID = 0;
+    for(auto o : w.m_connectionList)
+    {
+        print("%d ", o);
+        oID++;
+    }
+    print("\n\r");
+
+    if (w.m_hasInputAmp)
+    {
+        print("  input amplifiers:\n\r");
+        for(uint32_t i=0; i<w.m_inputAmps.size(); i++)
         {
             print("  ch %d ", i);
             dumpAmp(w.m_inputAmps[i]);
@@ -486,34 +675,27 @@ static void dumpOutput(const HDA::Widget &w)
     }
 }
 
-static void dumpMixer(const HDA::Widget &w)
+static void dumpJackInfo(const HDA::JackInfo &info)
 {
-    print("  input come from nodes: ");
-    size_t oID = 0;
-    for(auto o : w.m_connectionList)
+    print("  Jack colour: %s\n\r", HDA::JackInfo::colours[info.m_colour & 0xF]);
+    switch(info.m_location)
     {
-        print("%d ", o);
-        //if (oID == w.m_selection)
-        //{
-        //    print("(selected) ");
-        //}
-        //else
-        //{
-        //    print(" ");
-        //}
-        oID++;
+    case HDA::Location::Front:
+        print("    Front\n\r");
+        break;
+    case HDA::Location::Rear:
+        print("    Rear\n\r");
+        break;        
+    case HDA::Location::Left:
+        print("    Left\n\r");
+        break;                
+    case HDA::Location::Right:
+        print("    Right\n\r");
+        break;          
+    default:
+        print("    Unknown location\n\r");
+        break;                                
     }
-    print("\n\r");
-
-    print("  input amplifiers:\n\r");
-    for(uint32_t i=0; i<w.m_channels; i++)
-    {
-        print("  ch %d ", i);
-        dumpAmp(w.m_inputAmps[i]);
-    }
-
-    print("  output amplifier: ");
-    dumpAmp(w.m_outputAmp);
 }
 
 static void dumpPinComplex(const HDA::Widget &w)
@@ -536,6 +718,12 @@ static void dumpPinComplex(const HDA::Widget &w)
     case HDA::DefaultDevice::HeadphoneOut:
         print("Headphone\n\r");
         break;        
+    case HDA::DefaultDevice::SPDIFin:
+        print("SPDIF in\n\r");
+        break;         
+    case HDA::DefaultDevice::SPDIFout:
+        print("SPDIF out\n\r");
+        break;                        
     default:
         print("Unknown\n\r");
         break;
@@ -554,17 +742,26 @@ static void dumpPinComplex(const HDA::Widget &w)
         print("  Is an output pin\n\r");
     }
     
-    print("  Jack colour: %s\n\r", HDA::Widget::colours[w.m_jackColour & 0xF]);
+    dumpJackInfo(w.m_jackInfo); 
 
-    print("  connected to nodes: ");
-    size_t oID = 0;
-    for(auto o : w.m_connectionList)
+    if (!w.m_connectionList.empty())
     {
-        print("%d ", o);
-        oID++;
-    }
-    print("\n\r");
-    
+        print("  connected to nodes: ");
+        size_t oID = 0;
+        for(auto o : w.m_connectionList)
+        {
+            if (oID == w.m_selection)
+            {
+                print("%d (selected)    ", o);
+            }
+            else
+            {
+                print("%d ", o);
+            }
+            oID++;
+        }
+        print("\n\r");
+    }    
 }
 
 
@@ -604,5 +801,25 @@ void HDA::Widget::dump()
     default:
         print("  Unknown\n\r");
         return;
+    }
+}
+
+
+void refreshWidget(HDACodec &codec, HDA::Widget &w)
+{
+    // refresh amp settings
+    if (!w.m_inputAmps.empty())
+    {
+        size_t channel = 0;
+        for(auto& amp: w.m_inputAmps)
+        {
+            amp = getInputAmplifierInfo(codec, w.m_ID, channel);
+            channel++;
+        }
+    }
+
+    if (w.m_outputAmp.m_valid)
+    {
+        w.m_outputAmp = getOutputAmplifierInfo(codec, w.m_ID);
     }
 }
