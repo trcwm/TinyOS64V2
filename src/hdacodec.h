@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <optional>
 #include <array>
+#include <vector>
 
 #include "helpers.h"
 #include "efi.h"
@@ -11,9 +12,114 @@
 extern size_t print(const char *fmt, ...);
 extern EFI_SYSTEM_TABLE *g_sysTbl;
 
+namespace HDA
+{
+
+using WidgetID = uint32_t;
+
+enum class WidgetType
+{
+    Unknown,
+    Input,
+    Output,
+    Mixer,
+    Selector,
+    PinComplex,
+    BeepGen,
+    Vendor
+};
+
+enum class DefaultDevice
+{
+    Unknown,
+    LineOut,
+    Speaker,
+    LineIn,
+    MicIn,
+    HeadphoneOut
+};
+
+
+struct Amp
+{
+    Amp() : m_valid{false},
+    m_canMute(false),
+    m_0dBSetting(0),
+    m_muted{false,false},
+    m_volume{0,0} {};
+
+    bool        m_canMute;
+    uint32_t    m_0dBSetting;
+    bool        m_muted[2];
+    uint32_t    m_volume[2];
+    bool        m_valid;
+};
+
+struct Widget
+{
+    Widget()
+    {
+        m_ID = 0;
+        init();
+    }
+
+    Widget(WidgetID id) : m_ID(id) 
+    {
+        init();
+    };
+
+    void init()
+    {
+        m_type      = WidgetType::Unknown;
+        m_channels  = 0;
+        m_selection = 0;
+        m_defaultDevice = DefaultDevice::Unknown;
+
+        m_headphoneDriver = false;
+        m_inputPin  = false;
+        m_outputPin = false;
+        m_digital   = false;
+        m_hasMute   = false;
+        m_hasInputAmp  = false;
+        m_hasOutputAmp = false;
+        m_jackColour = 0;
+    }
+
+    WidgetID   m_ID;
+    WidgetType m_type;
+    std::vector<WidgetID> m_connectionList;
+    std::vector<Amp>    m_inputAmps; 
+    Amp                 m_outputAmp;
+    uint32_t            m_channels;
+    uint32_t            m_selection;
+
+    DefaultDevice       m_defaultDevice;
+
+    bool                m_headphoneDriver;
+    bool                m_inputPin;
+    bool                m_outputPin;
+    bool                m_digital;
+    bool                m_hasMute;
+    bool                m_hasInputAmp;
+    bool                m_hasOutputAmp;
+    uint32_t            m_jackColour;
+
+    static constexpr std::array<const char *, 16> colours =
+    {{
+        "Unknown", "Black", "Grey", "Blue", "Green", "Red",
+        "Orange", "Yellow", "Purple", "Pink", "Reserved",
+        "White", "Other"
+    }};
+
+    void dump();
+};
+
+};
+
 class HDACodec
 {
 public:
+
     HDACodec(uint32_t baseAddress) : m_base((void*)(uint64_t)baseAddress) 
     {
         m_descriptorBuffer = 0xFFFFFFFF;
@@ -48,7 +154,13 @@ public:
         {
             buffer[i] = static_cast<int16_t>(i*20);
         }
+
+        collectWidgetInformation();
     }
+
+    std::vector<HDA::Widget> m_widgets;
+
+    void collectWidgetInformation();
 
     struct RegDef
     {

@@ -1,6 +1,8 @@
 #include <cstdint>
 #include <uchar.h>
 #include <array>
+#include <vector>
+#include <list>
 #include <cstdarg>
 
 #include "myprint.h"
@@ -9,6 +11,7 @@
 #include "pci.h"
 #include "hdacodec.h"
 #include "commands.h"
+#include "allocator.h"
 
 bool operator==(const UEFI_GUID &id1, const UEFI_GUID &id2)
 {
@@ -249,6 +252,19 @@ extern "C"
     }
 
 
+    class TestObject
+    {
+    public:
+        TestObject()
+        {
+            print("Test object constructor called!\n\r");
+        }
+
+        uint32_t func()
+        {
+            return 123;
+        }
+    };
 
     void efi_init(EFI_HANDLE imageHandle, EFI_SYSTEM_TABLE *sysTbl)
     {
@@ -259,6 +275,20 @@ extern "C"
 
         g_sysTbl->m_bootServices->m_setWatchdogTimer(0, 0, 0, NULL);
         print("Watchdog disabled!\n\r");
+
+        //auto obj = new TestObject();
+
+        std::vector<TestObject> m_test;
+        m_test.resize(3);
+
+        m_test.emplace_back(TestObject());
+
+        print("Number of items in the vector = %d\n\r", m_test.size());
+
+        for(auto o : m_test)
+        {
+            print("Item %d\n\r", o.func());
+        }
 
 #if 0
         EFI_LOADED_IMAGE_PROTOCOL *loadedImage;
@@ -494,63 +524,8 @@ extern "C"
 
         // see 7.3.4.6 of HDA spec
         uint32_t codecNum = 0;
-        uint32_t outputNode = 0;
-        for(uint32_t node=1; node<128; node++)
-        {
-            codec.sendVerb(codecNum, node, 0xF00, 0x09);
-            auto result = codec.readVerbResponse();
-            if (result.has_value())
-            {
-                if (result.value_or(0) == 0)
-                    continue;
-                
-                if (result.value_or(0) == 0xFFFFFFFF)
-                    continue;                    
-
-                uint32_t nodeType = (result.value_or(0) >> 20) & 0x0F;
-                switch(nodeType)
-                {
-                case 0: 
-                    print("Audio Output: %d\n\r", node);
-                    if (outputNode == 0)  
-                    {
-                        outputNode = node;
-                    }
-                    break;
-                case 1:
-                    print("Audio Input: %d\n\r", node);
-                    break;
-                case 2:
-                    print("Audio Mixer: %d\n\r", node);
-                    break;
-                case 3:
-                    print("Audio Selector: %d\n\r", node);
-                    break;                
-                case 4:
-                    print("Pin complex: %d\n\r", node);
-                    codec.sendVerb(codecNum, node, 0xF00, 0x0C);     // pin type
-                    result = codec.readVerbResponse();
-                    if (result.has_value())
-                    {
-                        auto pinTypeBits = result.value_or(0) & 0x30;
-                        if (pinTypeBits & 0x10)
-                            print("  output pin\n\r");
-                        if (pinTypeBits & 0x20)
-                            print("  input pin\n\r");
-                    }
-                    else
-                    {
-                        print("  UNKNOWN\n\r");
-                    }
-                    break;                                        
-                }
-            }
-            else
-            {
-                //print("Cannot read node %d\n\r", node);
-            }
-        }
-
+        uint32_t outputNode = 2;    // hard code for now.
+        
         if (!codec.setOutputNode(outputNode))
         {
             print("SetOutputNode failed!\n\r");

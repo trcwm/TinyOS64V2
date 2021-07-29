@@ -24,6 +24,10 @@ typedef EFI_STATUS(*EFI_ALLOCATE_POOL)(
     void                **m_buffer
 );
 
+typedef EFI_STATUS(*EFI_FREE_POOL)(   
+    void                *m_buffer
+);
+
 typedef void(*EFI_EVENT_NOTIFY)(   
     EFI_EVENT m_event,
     void     *m_context
@@ -51,6 +55,11 @@ typedef EFI_STATUS (*EFI_ALLOCATE_PAGES)(
     EFI_PHYSICAL_ADDRESS* Memory
 );
 
+typedef EFI_STATUS (*EFI_FREE_PAGES)(
+    uint64_t Pages,
+    EFI_PHYSICAL_ADDRESS Memory
+);
+
 struct EFI_BOOT_SERVICES
 {
     EFI_TABLE_HEADER        m_header;
@@ -59,10 +68,10 @@ struct EFI_BOOT_SERVICES
 
     // memory services
     EFI_ALLOCATE_PAGES      m_allocatePages;
-    void*                   m_freePages;
+    EFI_FREE_PAGES          m_freePages;
     EFI_GET_MEMORY_MAP      m_getMemoryMap;
     EFI_ALLOCATE_POOL       m_allocatePool;
-    void*                   m_freePool;
+    EFI_FREE_POOL           m_freePool;
 
     // event and timer services
     void*                   m_createEvent;
