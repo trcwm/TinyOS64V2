@@ -276,20 +276,6 @@ extern "C"
         g_sysTbl->m_bootServices->m_setWatchdogTimer(0, 0, 0, NULL);
         print("Watchdog disabled!\n\r");
 
-        //auto obj = new TestObject();
-
-        std::vector<TestObject> m_test;
-        m_test.resize(3);
-
-        m_test.emplace_back(TestObject());
-
-        print("Number of items in the vector = %d\n\r", m_test.size());
-
-        for(auto o : m_test)
-        {
-            print("Item %d\n\r", o.func());
-        }
-
 #if 0
         EFI_LOADED_IMAGE_PROTOCOL *loadedImage;
         EFI_STATUS status;
@@ -538,7 +524,6 @@ extern "C"
             print("Viable output pin node: %d\n\r", widget.m_ID);
         }
 
-        // see 7.3.4.6 of HDA spec
         uint32_t codecNum = 0;
         uint32_t outputNode = 2;    // hard code for now.
 
@@ -551,12 +536,24 @@ extern "C"
             print("SetOutputNode OK!\n\r");
         }
 
-        HDACodec::StreamFormat streamFormat;
-        streamFormat.m_value = (1<<4) /* 16 bits packed */ | 1 /* stereo */;
+        HDA::StreamFormat streamFormat;
+        streamFormat.set(HDA::SampleRate::R48000, HDA::BitDepth::B16, 2);
         
         codec.outputStreamSetDescriptorList();
         codec.outputStreamLength(16*4096);
         codec.outputStreamFormat(streamFormat);
+        codec.enablePinWidget(codec.m_widgets[27]);
+
+        auto oldStreamFormat = codec.getIOWidgetFormat(codec.m_widgets[outputNode]);
+        if (oldStreamFormat.has_value())
+        {
+            auto sf = oldStreamFormat.value_or(0);
+            print("Old output node stream format: sr=%s bits=%s\n\r",
+                HDA::toString(sf.getSampleRate()), 
+                HDA::toString(sf.getBitDepth()));
+        }
+    
+        codec.setIOWidgetFormat(codec.m_widgets[outputNode], streamFormat);
         
         size_t consoleBufferIdx = 0;
         char consoleBuffer[256];

@@ -52,6 +52,85 @@ void HDACodec::turnOffCorbRirbDmapos()
     writeReg("dplbase", 0);
 }
 
+bool HDACodec::disablePinWidget(HDA::Widget &w)
+{
+    if (w.m_type != HDA::WidgetType::PinComplex)
+        return false;
+
+    sendVerb(0, w.m_ID, 0xF07, 0);
+    auto ctrl = readVerbResponse();
+
+    if (!ctrl.has_value())
+        return false;
+
+    auto value = ctrl.value_or(0) & 0x07;
+
+    sendVerb(0, w.m_ID, 0x707, value);
+    ctrl = readVerbResponse();
+    if (!ctrl.has_value())
+        return false;
+
+    return true;    
+}
+
+bool HDACodec::enablePinWidget(HDA::Widget &w)
+{
+    if (w.m_type != HDA::WidgetType::PinComplex)
+        return false;
+
+    sendVerb(0, w.m_ID, 0xF07, 0);
+    auto ctrl = readVerbResponse();
+
+    if (!ctrl.has_value())
+        return false;
+
+    auto value = ctrl.value_or(0) & 0x07;
+    value |= (1<<6);
+
+    if (w.m_headphoneDriver)
+        value |= (1<<7);
+
+    sendVerb(0, w.m_ID, 0x707, value);
+    ctrl = readVerbResponse();
+    if (!ctrl.has_value())
+        return false;
+
+    return true;
+}
+
+// add pin sense, page 168
+
+bool HDACodec::setIOWidgetFormat(HDA::Widget &w, const HDA::StreamFormat &format)
+{
+    if ((w.m_type != HDA::WidgetType::Output) && (w.m_type != HDA::WidgetType::Input))
+        return false;    
+
+    sendVerb(0, w.m_ID, 0x200, format.m_value & 0xFFFF);
+    auto ctrl = readVerbResponse();
+
+    if (!ctrl.has_value())
+        return false;
+
+    return true;
+}
+
+std::optional<HDA::StreamFormat> HDACodec::getIOWidgetFormat(HDA::Widget &w)
+{
+    if ((w.m_type != HDA::WidgetType::Output) && (w.m_type != HDA::WidgetType::Input))
+        return std::nullopt; 
+
+    sendVerb(0, w.m_ID, 0xA00, 0);
+    auto ctrl = readVerbResponse();
+
+    if (!ctrl.has_value())
+        return std::nullopt;
+
+    HDA::StreamFormat format;
+    format.m_value = ctrl.value_or(0);
+
+    return format;
+}
+
 #if 0
 void HDACodec::inputStreamTurnOff()
 {
@@ -126,6 +205,11 @@ void HDACodec::outputStreamSetDescriptorList()
     descriptorListPtr[7] = 0;
 }
 
+size_t HDACodec::getPlayPos()
+{
+    return read32(m_outputDescriptor+0x04);
+}
+
 void HDACodec::setSSync()
 {    
 }
@@ -135,12 +219,12 @@ void HDACodec::outputStreamLength(size_t length)
     write32(m_outputDescriptor+0x08, length);
 }
 
-void HDACodec::outputStreamFormat(const StreamFormat &format)
+void HDACodec::outputStreamFormat(const HDA::StreamFormat &format)
 {
     write32(m_outputDescriptor+0x12, format.m_value);
 }
 
-void HDACodec::playSound(size_t length, const StreamFormat &format)
+void HDACodec::playSound(size_t length, const HDA::StreamFormat &format)
 {
     outputStreamSetDescriptorList();
     outputStreamLength(length);
@@ -823,3 +907,166 @@ void refreshWidget(HDACodec &codec, HDA::Widget &w)
         w.m_outputAmp = getOutputAmplifierInfo(codec, w.m_ID);
     }
 }
+
+
+bool HDA::StreamFormat::set(SampleRate sr, BitDepth bits, uint32_t channels)
+{
+    if (sr == SampleRate::Invalid) return false;
+    if (bits == BitDepth::Invalid) return false;
+    if (channels > 16) return false;
+    if (channels == 0) return false;
+
+    m_value  = channels-1;
+    switch(bits)
+    {
+    case BitDepth::B8:
+        break;
+    case BitDepth::B16:
+        m_value |= (1<<4);
+        break;
+    case BitDepth::B20:
+        m_value |= (2<<4);
+        break;
+    case BitDepth::B24:
+        m_value |= (3<<4);
+        break; 
+    case BitDepth::B32:
+        m_value |= (4<<4);
+        break;
+    default:
+        return false;
+    }
+    
+    uint32_t baseRate = 0;
+    uint32_t multiplier = 0;
+    uint32_t divisor = 0;
+    switch(sr)
+    {
+    case SampleRate::R16000:
+        baseRate   = 0; // 48 kHz
+        multiplier = 0; // 48kHz or less
+        divisor    = 2; // divide by 3
+        break;
+    case SampleRate::R22050:
+        baseRate   = 1; // 44.1 kHz
+        multiplier = 0; // 48kHz or less
+        divisor    = 1; // divide by 2
+        break;
+    case SampleRate::R32000:
+        baseRate   = 0; // 48 kHz
+        multiplier = 1; // x2 
+        divisor    = 2; // divide by 3
+        break;  
+    case SampleRate::R44100:
+        baseRate   = 1; // 44.1 kHz
+        multiplier = 0; // 48kHz or less
+        divisor    = 0; // no-divide
+        break;      
+    case SampleRate::R48000:
+        baseRate   = 0; // 48 kHz
+        multiplier = 0; // 48kHz or less
+        divisor    = 0; // no-divide
+        break;              
+    case SampleRate::R96000:
+        baseRate   = 0; // 48 kHz
+        multiplier = 1; // x2
+        divisor    = 0; // no-divide
+        break;                      
+    case SampleRate::R192000:
+        baseRate   = 0; // 48 kHz
+        multiplier = 3; // x4
+        divisor    = 0; // no-divide
+        break;
+    };
+
+    m_value |= (baseRate << 14);
+    m_value |= (multiplier << 11);
+    m_value |= (divisor << 8);
+
+    return true;
+}
+
+HDA::SampleRate HDA::StreamFormat::getSampleRate() const
+{
+    uint32_t baseRate   = (m_value >> 14) & 0x1;
+    uint32_t multiplier = (m_value >> 11) & 0x7;
+    uint32_t divisor    = (m_value >> 8) & 0x7;
+
+    uint32_t rate = (baseRate == 0) ? 48000:44100;
+    rate *= (multiplier+1);
+    rate /= (divisor+1);
+
+    switch(rate)
+    {
+    case 16000:
+        return HDA::SampleRate::R16000;
+    case 32000:
+        return HDA::SampleRate::R32000;
+    case 44100:
+        return HDA::SampleRate::R44100;
+    case 48000:
+        return HDA::SampleRate::R48000;
+    case 96000:
+        return HDA::SampleRate::R96000;
+    case 192000:
+        return HDA::SampleRate::R192000;
+    default:
+        return HDA::SampleRate::Invalid;
+    }
+};
+
+HDA::BitDepth HDA::StreamFormat::getBitDepth() const
+{
+    uint32_t v = (m_value >> 4) & 0x7;
+    switch (v)
+    {
+    case 0:
+        return HDA::BitDepth::B8;
+    case 1:
+        return HDA::BitDepth::B16;
+    case 2:
+        return HDA::BitDepth::B20;
+    case 3:
+        return HDA::BitDepth::B24;
+    case 4:
+        return HDA::BitDepth::B32;
+    default:
+        return HDA::BitDepth::Invalid;
+    }
+}
+
+uint32_t HDA::StreamFormat::getChannels() const
+{
+    return (m_value & 0xF) + 1;
+}
+
+const char* HDA::toString(const HDA::BitDepth &d)
+{
+    constexpr std::array<const char *, 6> strings =
+    {{
+        "Invalid", "8 bits", "16 bits", "20 bits", "24 bits", "32 bits"
+    }};
+
+    auto dd = static_cast<uint8_t>(d);
+
+    if ((dd < 0) || (dd >= strings.size()))
+        return strings[0];
+    
+    return strings[dd];
+}
+
+const char* HDA::toString(const HDA::SampleRate &sr)
+{
+    constexpr std::array<const char *, 8> strings =
+    {{
+        "Invalid", "16000", "22050", "32000", "44100", "48000", "96000", "192000"
+    }};
+
+    auto dd = static_cast<uint8_t>(sr);
+
+    if ((dd < 0) || (dd >= strings.size()))
+        return strings[0];
+    
+    return strings[dd];
+}
+

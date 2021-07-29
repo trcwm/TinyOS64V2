@@ -50,6 +50,32 @@ enum class Location
     Right
 };
 
+enum class SampleRate
+{
+    Invalid,
+    R16000,
+    R22050,
+    R32000,
+    R44100,
+    R48000,
+    R96000,
+    R192000
+};
+
+enum class BitDepth
+{
+    Invalid,
+    B8,
+    B16,
+    B20,
+    B24,
+    B32
+};
+
+const char* toString(const BitDepth &d);
+
+const char* toString(const SampleRate &sr);
+
 struct JackInfo
 {
     JackInfo() : m_colour(0), m_location(Location::Unknown), m_isPhysical(false), m_isInternal(false) {};
@@ -80,6 +106,20 @@ struct Amp
     bool        m_muted[2];
     uint32_t    m_volume[2];
     bool        m_valid;
+};
+
+struct StreamFormat
+{   
+    StreamFormat() : m_value(0) {};
+    StreamFormat(uint32_t v) : m_value(v) {};
+
+    bool set(SampleRate sr, BitDepth bits, uint32_t channels);
+
+    SampleRate getSampleRate() const;
+    BitDepth   getBitDepth() const;
+    uint32_t   getChannels() const;
+
+    uint32_t m_value;
 };
 
 struct Widget
@@ -172,7 +212,7 @@ public:
 
         // fill audio buffer with crap..
         int16_t *buffer = (int16_t*)m_audioBuffer;
-        for(size_t i=0; i<16*4096/4; i++)
+        for(size_t i=0; i<(16*4096/sizeof(int16_t)); i++)
         {
             buffer[i] = static_cast<int16_t>(i*20);
         }
@@ -338,27 +378,27 @@ public:
         m_outputDescriptor = 0x80 + 0x20 * numberOfInputStreams;
     }
 
-    struct StreamFormat
-    {        
-        uint32_t m_value;
-    };
+    bool enablePinWidget(HDA::Widget &w);
+    bool disablePinWidget(HDA::Widget &w);
 
+    bool setIOWidgetFormat(HDA::Widget &w, const HDA::StreamFormat &format);
+    std::optional<HDA::StreamFormat> getIOWidgetFormat(HDA::Widget &w);
+
+    size_t getPlayPos();
+    
     void disableInterrupt();
     void turnOffCorbRirbDmapos();
-    //void inputStreamTurnOff();
     void outputStreamTurnOff();
-    //void inputStreamTurnOn();
     void outputStreamTurnOn();
-    //void inputStreamSetBuffer(size_t address);
 
     void outputStreamSetDescriptorList();
     void outputStreamLength(size_t length);
-    void outputStreamFormat(const StreamFormat &format);
+    void outputStreamFormat(const HDA::StreamFormat &format);
 
     void setSSync();
     bool setOutputNode(uint32_t node);    
 
-    void playSound(size_t length, const StreamFormat &format);
+    void playSound(size_t length, const HDA::StreamFormat &format);
     void stopSound();
 
     void sendVerb(uint32_t codec, uint32_t node, uint32_t verb, uint32_t command);

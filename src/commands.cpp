@@ -661,6 +661,48 @@ static bool cmdDisplayNode(HDACodec &codec, const std::string_view &params)
     #endif
 }
 
+static bool cmdPlayPos(HDACodec &codec, const std::string_view &params)
+{
+    print("  $%X\n\r", codec.getPlayPos());
+    return true;
+}
+
+static bool cmdGetFormat(HDACodec &codec, const std::string_view &params)
+{
+    auto widgetParam = findNextParam(params);
+    auto widgetID = valueFromStr(widgetParam.m_param);
+
+    if (widgetID.has_value())
+    {
+        auto id = widgetID.value_or(0);
+        if (id < codec.m_widgets.size())
+        {
+            auto format = codec.getIOWidgetFormat(codec.m_widgets[id]);
+            if (!format.has_value())
+            {
+                print("Cannot get format \n\r");
+                return false;
+            }
+            
+            auto f = format.value_or(0);
+
+            print("  format: sr=%s bits=%s channels=%d\n\r", 
+                HDA::toString(f.getSampleRate()),
+                HDA::toString(f.getBitDepth()),
+                f.getChannels());
+            
+            return true;
+        }
+        else
+        {
+            print("Node ID out of range\n\r");
+            return false;
+        }
+    }
+
+    return false;
+}
+
 static bool cmdReadCodecRegister(HDACodec &codec, const std::string_view &params)
 {
     // read regname
@@ -693,21 +735,153 @@ static bool cmdWriteCodecRegister(HDACodec &codec, const std::string_view &param
     return false;
 }
 
+static bool cmdShowVideo(HDACodec &codec, const std::string_view &params)
+{
+    print("Video modes:\n\r");
+    // try to find the Graphics driver
+    UEFI_GUID gopGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
+
+    if (g_sysTbl->m_bootServices->m_locateProtocol(&gopGuid, nullptr, (void**)&gop) != 0)
+    {
+        print("Cannot access UEFI graphics protocol\n\r");
+        return false;
+    }
+    else
+    {
+        EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *info;
+        size_t sizeOfInfo;
+        auto currentMode = gop->Mode==NULL ? 0:gop->Mode->m_mode;
+        auto maxMode     = gop->Mode==NULL ? 0:gop->Mode->m_maxMode;
+        auto dispAddr    = gop->Mode==NULL ? 0:gop->Mode->m_frameBufferBase;
+        uint64_t dispSize = gop->Mode==NULL ? 0:gop->Mode->m_frameBufferSize;
+
+        wchar_t buffer[100];
+        print("Current video mode is %d\n\r", currentMode);
+        print("Frame buffer address  %X\n\r", dispAddr);
+        print("Frame buffer size     %d bytes\n\r", dispSize);
+        print("Available modes: %d\n\r", gop->Mode->m_maxMode);
+
+        int32_t desiredMode = -1;
+        size_t  offset = 0;
+        for(size_t modeIdx = 0; modeIdx < maxMode; modeIdx++)
+        {
+            if (modeIdx % 2 == 0)
+            {
+                print("\n\r");
+                offset = 2;
+            }
+            else
+            {
+                while(offset < 40)
+                {
+                    print(" ");
+                    offset++;
+                }
+            }
+
+            gop->QueryMode(gop, modeIdx, &sizeOfInfo, &info);
+
+            auto modeWidth  = info->m_horizontalResolution;
+            auto modeHeight = info->m_verticalResolution;
+
+            if (modeIdx < 10)
+            {
+                offset += print("mode  %d -> x=%d  y=%d        ", 
+                    modeIdx,
+                    modeWidth,
+                    modeHeight);
+            }
+            else
+            {
+                offset += print("mode %d -> x=%d  y=%d        ", 
+                    modeIdx,
+                    modeWidth,
+                    modeHeight);                
+            }
+        }
+        print("\n\r");
+    }    
+    return true;
+}
+
+static bool cmdShowText(HDACodec &codec, const std::string_view &params)
+{
+    print("Text modes:\n\r");
+    
+    uint64_t mode = 0;
+    uint64_t cols = 0;
+    uint64_t rows = 0;
+
+    auto status = g_sysTbl->m_conOut->m_queryMode(g_sysTbl->m_conOut, mode, &cols, &rows);
+    while(status == EFI_SUCCESS)
+    {
+        print("  mode: %d   rows=%d  cols=%d\n\r", mode, cols, rows);
+        mode++;
+        status = g_sysTbl->m_conOut->m_queryMode(g_sysTbl->m_conOut, mode, &cols, &rows);        
+    }    
+    return true;
+}
+
+static bool cmdSetTextMode(HDACodec &codec, const std::string_view &params)
+{
+    // read mode id
+    auto modeParam = findNextParam(params);
+    auto mode = valueFromStr(modeParam.m_param);
+
+    if (mode.has_value())
+    {
+        auto modeID = mode.value_or(0);
+        auto status = g_sysTbl->m_conOut->m_setMode(g_sysTbl->m_conOut, modeID);
+        if (status == EFI_SUCCESS)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool cmdHelp(HDACodec &codec, const std::string_view &params);   // pre-declaration
+
 struct commandDef
 {
     const char *name;
     commandPrototype m_func;
+    const char *description;
 };
 
-static constexpr const std::array<commandDef, 6> g_commands {
-    {{"read", cmdReadCodecRegister},
-     {"write", cmdWriteCodecRegister},
-     {"node", cmdDisplayNode},
-     {"unmute", cmdUnmute},
-     {"refresh", cmdRefresh},
-     {"nodeio", cmdNodeIO}
+static constexpr const std::array<commandDef, 12> g_commands {
+    {{"read", cmdReadCodecRegister, "Read codec register (reg name)"},
+     {"write", cmdWriteCodecRegister, "Write codec register (reg name, data)"},
+     {"node", cmdDisplayNode, "Display codec node information (nodeId)"},
+     {"unmute", cmdUnmute, "Unmute a node (nodeId)"},
+     {"refresh", cmdRefresh, "Update internal node database"},
+     {"nodeio", cmdNodeIO, "Write a verb/command to a node (nodeId, verb, payload)"},
+     {"getformat", cmdGetFormat, "Get the stream format for input/output nodes (nodeId)"},
+     {"playpos", cmdPlayPos, "Get the current play position"},
+     {"showvideo", cmdShowVideo, "Show available video modes"},
+     {"showtext", cmdShowText, "Show available text modes"},
+     {"settextmode", cmdSetTextMode, "Set text mode by id (mode id)"},
+     {"help", cmdHelp, "Show this list"}
     }
 };
+
+static bool cmdHelp(HDACodec &codec, const std::string_view &params)
+{
+    print("Available commands:\n\r");
+    for(auto cmd: g_commands)
+    {
+        size_t chars = print("  %s :", cmd.name);
+        while( chars < 16)
+        {
+            print(" ");
+            chars++;
+        }
+        print("%s\n\r", cmd.description);
+    }
+    return true;
+}
 
 bool Commands::execute(const std::string_view &line)
 {
