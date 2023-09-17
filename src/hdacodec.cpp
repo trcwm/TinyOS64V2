@@ -152,7 +152,10 @@ void HDACodec::inputStreamTurnOn()
 
 void HDACodec::outputStreamTurnOn()
 {
+    writeReg("dplbase", m_dmaPositionBuffer | 1); // enable position feedback
+    writeReg("dpubase", 0);
     write32(m_outputDescriptor, 0x00140002);
+    print("Stream %d activated\n\r", (0x00140002 >> 20) & 0xF);
 }
 
 bool HDACodec::setOutputNode(uint32_t node)
@@ -205,8 +208,18 @@ void HDACodec::outputStreamSetDescriptorList()
     descriptorListPtr[7] = 0;
 }
 
-size_t HDACodec::getPlayPos()
+size_t HDACodec::getPlayPos() const
 {
+    #if 0
+    volatile uint32_t* dmaPosBuffer = (volatile uint32_t*)m_dmaPositionBuffer;
+    for(uint32_t n=0; n<30; n++)
+    {
+        print("%x        ", dmaPosBuffer[2*n]);
+    }
+
+    return dmaPosBuffer[2+40];
+    #endif
+
     return read32(m_outputDescriptor+0x04);
 }
 

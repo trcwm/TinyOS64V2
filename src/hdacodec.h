@@ -217,6 +217,19 @@ public:
             buffer[i] = static_cast<int16_t>(i*20);
         }
 
+        m_dmaPositionBuffer = 0xFFFFFFFF;
+        result = g_sysTbl->m_bootServices->m_allocatePages(AllocateMaxAddress,
+            EfiRuntimeServicesData, 1, &m_dmaPositionBuffer);
+
+        if (result != EFI_SUCCESS)
+        {
+            print("Failed to allocate memory for codec dma position buffer!\n\r");
+        }
+        else
+        {
+            print("Allocated memory for codec dma position buffer at 0x%x!\n\r", m_dmaPositionBuffer);
+        }        
+
         collectWidgetInformation();
     }
 
@@ -384,7 +397,7 @@ public:
     bool setIOWidgetFormat(HDA::Widget &w, const HDA::StreamFormat &format);
     std::optional<HDA::StreamFormat> getIOWidgetFormat(HDA::Widget &w);
 
-    size_t getPlayPos();
+    size_t getPlayPos() const;
     
     void disableInterrupt();
     void turnOffCorbRirbDmapos();
@@ -417,9 +430,11 @@ public:
 protected:
     EFI_PHYSICAL_ADDRESS m_descriptorBuffer;
     EFI_PHYSICAL_ADDRESS m_audioBuffer;
+    EFI_PHYSICAL_ADDRESS m_dmaPositionBuffer;
+
     size_t  m_inputDescriptor;
     size_t  m_outputDescriptor;
-
+    
     void *m_base;
 };
 

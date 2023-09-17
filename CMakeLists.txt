@@ -21,9 +21,9 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Map=output.map")
 
 add_executable(boot
     src/allocator.cpp
-    src/commands.cpp
+    #src/commands.cpp
     src/pci.cpp
-    src/hdacodec.cpp
+    #src/hdacodec.cpp
     src/myprint.cpp
     src/main.cpp)
 

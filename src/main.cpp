@@ -439,6 +439,7 @@ extern "C"
         }
 #endif
 
+#if 0
         auto HDADeviceInfo = findHDAudioDevice(0,0,0);
         AudioDeviceResult audioDevice;
 
@@ -564,6 +565,7 @@ extern "C"
 
         codec.playSound(16*4096, streamFormat);
 
+
         print(">");
         while(1)
         {
@@ -613,5 +615,7 @@ extern "C"
                 }
             }
         }
+#endif        
+    while(1) {};
     }
 }

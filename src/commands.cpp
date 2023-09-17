@@ -5,6 +5,16 @@
 
 extern size_t print(const char *fmt, ...);
 
+extern "C" size_t strlen(const char *s)
+{
+    size_t count = 0;
+    while(*s++ != 0)
+    {
+        count++;
+    }
+    return count;
+}
+
 constexpr bool isAlpha(char c)
 {
     if ((c>='a') && (c<='z')) return true;
@@ -663,7 +673,7 @@ static bool cmdDisplayNode(HDACodec &codec, const std::string_view &params)
 
 static bool cmdPlayPos(HDACodec &codec, const std::string_view &params)
 {
-    print("  $%X\n\r", codec.getPlayPos());
+    print("  $%x\n\r", codec.getPlayPos());
     return true;
 }
 
@@ -842,6 +852,48 @@ static bool cmdSetTextMode(HDACodec &codec, const std::string_view &params)
     return false;
 }
 
+static bool cmdReadMem(HDACodec &codec, const std::string_view &params)
+{
+    // read address
+    auto addrParam = findNextParam(params);
+    auto addr = valueFromStr(addrParam.m_param);    
+
+    auto lenParam = findNextParam(addrParam.m_remainder);
+    auto len  = valueFromStr(lenParam.m_param);
+
+    if (!addr.has_value())
+    {
+        return false;
+    }
+
+    uint32_t words      = 1;
+    uint32_t offset     = 0;
+    uint64_t address    = addr.value_or(0);
+    uint32_t *mem = (uint32_t*)address;
+
+    if (len.has_value())
+    {
+        words = len.value_or(words);
+    }
+
+    while(offset < words)
+    {
+        if ((offset %4) == 0)
+        {
+            print("$%x : ", address + offset*4);
+        }
+        print("$%x  ", mem[offset]);
+        offset++;
+        if ((offset %4) == 0)
+        {
+            print("\n\r");
+        }        
+    }
+
+    print("\n\r");
+    return true;
+}
+
 static bool cmdHelp(HDACodec &codec, const std::string_view &params);   // pre-declaration
 
 struct commandDef
@@ -851,7 +903,7 @@ struct commandDef
     const char *description;
 };
 
-static constexpr const std::array<commandDef, 12> g_commands {
+static constexpr const std::array<commandDef, 13> g_commands {
     {{"read", cmdReadCodecRegister, "Read codec register (reg name)"},
      {"write", cmdWriteCodecRegister, "Write codec register (reg name, data)"},
      {"node", cmdDisplayNode, "Display codec node information (nodeId)"},
@@ -863,6 +915,7 @@ static constexpr const std::array<commandDef, 12> g_commands {
      {"showvideo", cmdShowVideo, "Show available video modes"},
      {"showtext", cmdShowText, "Show available text modes"},
      {"settextmode", cmdSetTextMode, "Set text mode by id (mode id)"},
+     {"rdmem", cmdReadMem, "Read memory address (addr [, length])"},
      {"help", cmdHelp, "Show this list"}
     }
 };
